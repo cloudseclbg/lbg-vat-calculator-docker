@@ -1,36 +1,28 @@
-pipeline{
- environment {
- registry = "cloudseclbg1/vatcal"
-        registryCredentials = "dockerhub_id"
-        dockerImage = ""
-    }
-    agent any
-        stages {
-            stage ('Build Docker Image'){
-                steps{
-                    script {
-                        dockerImage = docker.build(registry)
-                    }
-                }
-            }
+# stage 1
+FROM node:19-alpine as build
 
-            stage ("Push to Docker Hub"){
-                steps {
-                    script {
-                        docker.withRegistry('', registryCredentials) {
-                            dockerImage.push("${env.BUILD_NUMBER}")
-                            dockerImage.push("latest")
-                        }
-                    }
-                }
-            }
+# change into a folder called /app
+WORKDIR /app
 
-            stage ("Clean up"){
-                steps {
-                    script {
-                        sh 'docker image prune --all --force --filter "until=48h"'
-                           }
-                }
-            }
-        }
-}
+# only copy package.json
+COPY package.json .
+
+# download the project dependencies
+RUN npm install
+
+# copy everything from the react app folder to the /app folder in the container
+COPY . .
+
+# package up the react project in the /app directory
+RUN npm run build
+
+# stage 2
+FROM nginx:1.23-alpine
+COPY --from=build /app/build /usr/share/nginx/html
+
+COPY nginx/nginx.conf /etc/nginx/conf./default.conf
+
+EXPOSE 80
+
+CMD ["nginx", "-g", "daemon off;"]
+
